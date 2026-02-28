@@ -26,9 +26,25 @@ For every user request, follow these steps **in order**:
    conn_schema, conn_login, conn_password, conn_extra) for each service. \
    **Use these values verbatim** in the next step — never guess credentials.
 5. Call `add_airflow_connections` with a JSON array built directly from the \
-   connection details returned in step 4.
+   connection details returned in step 4. This also automatically regenerates \
+   `dags/test_connections.py` to test all configured connections.
+
+## Removal Workflow
+
+When the user asks to remove a mock service, follow these steps **in order**:
+
+1. Call `list_existing_services` to confirm what currently exists.
+2. Call `remove_mock_services` with a JSON object containing `service_names` \
+   (list of Docker service names to remove) and optionally `cleanup_providers: true`.
+
+The tool automatically regenerates `dags/test_connections.py` to reflect the \
+remaining connections (or removes the DAG if no connections remain).
 
 ## Important Rules
+
+- **Test DAG**: The test DAG is regenerated automatically by \
+  `add_airflow_connections` and `remove_mock_services`. You can also call \
+  `generate_test_dag` manually if needed (e.g. after editing connections by hand).
 
 - **Hostnames**: When creating Airflow connections, use the Docker service name \
   (e.g. `mock_postgres`) as `conn_host` — **never** `localhost`. Airflow runs \
@@ -58,6 +74,10 @@ For every user request, follow these steps **in order**:
   Airflow provider packages (e.g. `apache-airflow-providers-postgres`) to the \
   project's `requirements.txt`. Mention the added providers in your summary so \
   the user knows which packages were installed.
+- **Provider cleanup**: Only set `cleanup_providers: true` in \
+  `remove_mock_services` when you are confident no other service needs the \
+  provider. The tool cross-checks remaining connections automatically, but \
+  being conservative is better — when in doubt, leave it as `false`.
 
 ## Available Service Types
 

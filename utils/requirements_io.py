@@ -71,3 +71,50 @@ def add_packages(
                 f.write(pkg + "\n")
 
     return to_add
+
+
+def remove_packages(
+    path: str | Path,
+    packages: list[str],
+    dry_run: bool = False,
+) -> list[str]:
+    """Remove *packages* from the requirements file.
+
+    Returns the list of package names that were (or would be) removed.
+    Matching is case-insensitive and ignores version specifiers.
+    Comments and blank lines are preserved.
+    """
+    p = Path(path)
+    if not p.exists():
+        return []
+
+    lines = p.read_text().splitlines()
+    to_remove = {_normalize_package_name(pkg) for pkg in packages}
+
+    kept: list[str] = []
+    removed: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            kept.append(line)
+            continue
+
+        # Extract the package name portion (before version specifiers).
+        pkg_name = stripped
+        for sep in (">=", "==", "~=", "!=", "<=", "<", ">", "["):
+            idx = pkg_name.find(sep)
+            if idx != -1:
+                pkg_name = pkg_name[:idx]
+                break
+        pkg_name = pkg_name.strip()
+
+        if _normalize_package_name(pkg_name) in to_remove:
+            removed.append(pkg_name)
+        else:
+            kept.append(line)
+
+    if removed and not dry_run:
+        p.write_text("\n".join(kept) + "\n" if kept else "")
+
+    return removed

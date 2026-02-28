@@ -77,6 +77,98 @@ def merge_airflow_settings(
 
 
 # ---------------------------------------------------------------------------
+# Removal helpers
+# ---------------------------------------------------------------------------
+
+def _extract_volume_names(service_spec: dict[str, Any]) -> set[str]:
+    """Return named volume names from a service's ``volumes`` list.
+
+    Entries look like ``"vol_name:/mount/path"``.  Bind mounts (starting
+    with ``./`` or ``/``) are skipped.
+    """
+    names: set[str] = set()
+    for entry in service_spec.get("volumes", []):
+        if isinstance(entry, str) and ":" in entry:
+            left = entry.split(":")[0]
+            if not left.startswith(("./", "/")):
+                names.add(left)
+    return names
+
+
+def remove_docker_services(
+    existing: dict[str, Any] | None,
+    service_names: list[str],
+    remove_orphaned_volumes: bool = True,
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    """Remove *service_names* from a docker-compose dict.
+
+    Returns ``(updated_compose, removed_services, removed_volumes)``.
+    Services not present in *existing* are silently skipped (the caller
+    can diff against *service_names* to find ``not_found`` entries).
+    """
+    base: dict[str, Any] = copy.deepcopy(existing) if existing else {}
+    services = base.get("services", {})
+    volumes_section = base.get("volumes", {})
+
+    removed_services: list[str] = []
+    orphaned_volumes: set[str] = set()
+
+    for name in service_names:
+        if name not in services:
+            continue
+        spec = services.pop(name)
+        removed_services.append(name)
+        orphaned_volumes |= _extract_volume_names(spec)
+
+    # Determine which volumes are still referenced by remaining services.
+    if remove_orphaned_volumes and orphaned_volumes:
+        still_used: set[str] = set()
+        for spec in services.values():
+            still_used |= _extract_volume_names(spec)
+        orphaned_volumes -= still_used
+
+    removed_volumes: list[str] = []
+    for vol in list(orphaned_volumes):
+        if vol in volumes_section:
+            del volumes_section[vol]
+            removed_volumes.append(vol)
+
+    return base, removed_services, removed_volumes
+
+
+def remove_airflow_connections(
+    existing: dict[str, Any] | None,
+    conn_ids: list[str] | None = None,
+    conn_hosts: list[str] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Remove connections matching *conn_ids* or *conn_hosts*.
+
+    Returns ``(updated_settings, removed_conn_ids)``.
+    """
+    base: dict[str, Any] = copy.deepcopy(existing) if existing else {}
+    conn_list: list[dict[str, Any]] = (
+        base.get("airflow", {}).get("connections", [])
+    )
+
+    id_set = set(conn_ids or [])
+    host_set = set(conn_hosts or [])
+
+    kept: list[dict[str, Any]] = []
+    removed_ids: list[str] = []
+
+    for conn in conn_list:
+        cid = conn.get("conn_id", "")
+        chost = conn.get("conn_host", "")
+        if cid in id_set or chost in host_set:
+            removed_ids.append(cid)
+        else:
+            kept.append(conn)
+
+    base.setdefault("airflow", {})["connections"] = kept
+    return base, removed_ids
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

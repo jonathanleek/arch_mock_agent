@@ -11,9 +11,15 @@ from anthropic.lib.tools import beta_tool
 from catalog.ports import allocate_port
 from catalog.providers import get_provider_packages
 from catalog.services import SERVICE_CATALOG, apply_overrides, find_service
-from utils.requirements_io import add_packages, read_requirements
+from utils.requirements_io import add_packages, read_requirements, remove_packages
+from utils.dag_writer import write_test_dag
 from utils.yaml_io import read_yaml, write_yaml
-from utils.yaml_merge import merge_airflow_settings, merge_docker_compose
+from utils.yaml_merge import (
+    merge_airflow_settings,
+    merge_docker_compose,
+    remove_airflow_connections,
+    remove_docker_services,
+)
 
 # These module-level variables are set by the agent loop before tools run.
 _project_dir: Path = Path(".")
@@ -37,6 +43,10 @@ def _settings_path() -> Path:
 
 def _requirements_path() -> Path:
     return _project_dir / "requirements.txt"
+
+
+def _dags_path() -> Path:
+    return _project_dir / "dags" / "test_connections.py"
 
 
 # ---------------------------------------------------------------------------
@@ -308,12 +318,183 @@ def add_airflow_connections(connections_json: str) -> str:
     if _dry_run:
         import yaml
         preview = yaml.dump(merged, default_flow_style=False, sort_keys=False)
-        return "DRY RUN — would write airflow_settings.yaml:\n\n" + preview
+        all_conns = merged.get("airflow", {}).get("connections", [])
+        _, dag_source = write_test_dag(_dags_path(), all_conns, dry_run=True)
+        return (
+            "DRY RUN — would write airflow_settings.yaml:\n\n" + preview
+            + f"\n\nWould regenerate test DAG with {len(all_conns)} task(s)."
+        )
 
     write_yaml(_settings_path(), merged)
 
+    # Regenerate the test DAG to include all connections.
+    all_conns = merged.get("airflow", {}).get("connections", [])
+    dag_path_str, _ = write_test_dag(_dags_path(), all_conns, dry_run=False)
+
     ids = [c.get("conn_id", "?") for c in conns]
-    return f"Updated airflow_settings.yaml with connections: {', '.join(ids)}"
+    return (
+        f"Updated airflow_settings.yaml with connections: {', '.join(ids)}\n"
+        f"Regenerated {dag_path_str} with {len(all_conns)} task(s)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: generate_test_dag
+# ---------------------------------------------------------------------------
+
+@beta_tool
+def generate_test_dag() -> str:
+    """Generate a test DAG at dags/test_connections.py that verifies every
+    Airflow connection in airflow_settings.yaml.
+
+    The DAG contains one task per connection. Each task calls
+    ``BaseHook.get_connection()`` → ``get_hook()`` → ``test_connection()``
+    to confirm the connection is reachable.
+
+    No arguments are needed — connections are read from airflow_settings.yaml.
+    """
+    settings = read_yaml(_settings_path())
+    conns = (settings or {}).get("airflow", {}).get("connections", [])
+
+    if not conns:
+        return (
+            "No connections found in airflow_settings.yaml. "
+            "Add connections first with add_airflow_connections, then re-run."
+        )
+
+    path_str, source = write_test_dag(_dags_path(), conns, dry_run=_dry_run)
+
+    if _dry_run:
+        return (
+            f"DRY RUN — would write {path_str} with {len(conns)} task(s).\n\n"
+            f"Preview:\n{source}"
+        )
+
+    return (
+        f"Wrote {path_str} with {len(conns)} task(s) testing connections: "
+        + ", ".join(c.get("conn_id", "?") for c in conns)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 7: remove_mock_services
+# ---------------------------------------------------------------------------
+
+@beta_tool
+def remove_mock_services(services_json: str) -> str:
+    """Remove mock Docker services, their Airflow connections, orphaned
+    volumes, and optionally unused provider packages.
+
+    Accepts a JSON object with:
+    - service_names: list of Docker service names to remove
+    - cleanup_providers: bool (default false) — remove provider packages
+      no longer needed by any remaining connection
+
+    Args:
+        services_json: JSON object with service_names and optional cleanup_providers.
+    """
+    try:
+        payload: dict[str, Any] = json.loads(services_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"status": "error", "message": f"Invalid JSON: {e}"})
+
+    service_names: list[str] = payload.get("service_names", [])
+    cleanup_providers: bool = payload.get("cleanup_providers", False)
+
+    if not service_names:
+        return json.dumps({"status": "error", "message": "service_names is required and must be non-empty."})
+
+    # --- 1. Remove Docker services and orphaned volumes ---
+    compose = read_yaml(_compose_path())
+    updated_compose, removed_services, removed_volumes = remove_docker_services(
+        compose, service_names, remove_orphaned_volumes=True,
+    )
+
+    not_found = [n for n in service_names if n not in removed_services]
+
+    # --- 2. Remove Airflow connections whose conn_host matches a removed service ---
+    settings = read_yaml(_settings_path())
+    updated_settings, removed_conn_ids = remove_airflow_connections(
+        settings, conn_hosts=removed_services,
+    )
+
+    # --- 3. Optionally clean up provider packages ---
+    providers_removed: list[str] = []
+    if cleanup_providers and removed_conn_ids:
+        # Determine conn_types of removed connections.
+        old_conns = (settings or {}).get("airflow", {}).get("connections", [])
+        removed_conn_types: set[str] = set()
+        for conn in old_conns:
+            if conn.get("conn_id") in removed_conn_ids:
+                ct = conn.get("conn_type", "")
+                if ct:
+                    removed_conn_types.add(ct)
+
+        # Determine conn_types still in use by remaining connections.
+        remaining_conns = updated_settings.get("airflow", {}).get("connections", [])
+        remaining_types: set[str] = {
+            c.get("conn_type", "") for c in remaining_conns if c.get("conn_type")
+        }
+
+        # Only remove providers for types no longer in use.
+        orphaned_types = removed_conn_types - remaining_types
+        if orphaned_types:
+            packages_to_remove = get_provider_packages(list(orphaned_types))
+            if packages_to_remove:
+                providers_removed = remove_packages(
+                    _requirements_path(), packages_to_remove, dry_run=_dry_run,
+                )
+
+    # --- 4. Write files and regenerate test DAG (unless dry run) ---
+    if _dry_run:
+        import yaml
+        # Preview what the test DAG would look like after removal.
+        remaining_conns = updated_settings.get("airflow", {}).get("connections", [])
+        dag_preview: str | None = None
+        if remaining_conns:
+            _, source = write_test_dag(_dags_path(), remaining_conns, dry_run=True)
+            dag_preview = source
+        return json.dumps({
+            "status": "dry_run",
+            "compose_preview": yaml.dump(updated_compose, default_flow_style=False, sort_keys=False),
+            "settings_preview": yaml.dump(updated_settings, default_flow_style=False, sort_keys=False),
+            "removed_services": removed_services,
+            "removed_connections": removed_conn_ids,
+            "removed_volumes": removed_volumes,
+            "not_found": not_found,
+            "providers_removed": providers_removed,
+            "test_dag_preview": dag_preview,
+        })
+
+    if removed_services:
+        write_yaml(_compose_path(), updated_compose)
+    if removed_conn_ids:
+        write_yaml(_settings_path(), updated_settings)
+
+    # --- 5. Regenerate test DAG to reflect remaining connections ---
+    remaining_conns = updated_settings.get("airflow", {}).get("connections", [])
+    test_dag_info: str | None = None
+    if remaining_conns:
+        path_str, _ = write_test_dag(_dags_path(), remaining_conns, dry_run=_dry_run)
+        test_dag_info = f"Regenerated {path_str} with {len(remaining_conns)} task(s)."
+    else:
+        # No connections left — remove the test DAG if it exists.
+        dag_path = _dags_path()
+        if dag_path.exists() and not _dry_run:
+            dag_path.unlink()
+            test_dag_info = f"Removed {dag_path} (no connections remain)."
+
+    result: dict[str, Any] = {
+        "status": "ok",
+        "removed_services": removed_services,
+        "removed_connections": removed_conn_ids,
+        "removed_volumes": removed_volumes,
+        "not_found": not_found,
+        "providers_removed": providers_removed,
+    }
+    if test_dag_info:
+        result["test_dag"] = test_dag_info
+    return json.dumps(result)
 
 
 # ---------------------------------------------------------------------------
@@ -326,4 +507,6 @@ ALL_TOOLS = [
     read_current_config,
     add_docker_services,
     add_airflow_connections,
+    generate_test_dag,
+    remove_mock_services,
 ]
