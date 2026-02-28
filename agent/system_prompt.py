@@ -18,9 +18,15 @@ For every user request, follow these steps **in order**:
 2. Call `get_service_catalog` with a query for each service the user mentioned \
    to find matching catalog entries.
 3. Call `add_docker_services` with a JSON array of service specs to generate \
-   Docker service definitions and merge them into docker-compose.override.yml.
-4. Call `add_airflow_connections` with a JSON array of connection specs to \
-   generate Airflow connections and merge them into airflow_settings.yaml.
+   Docker service definitions and merge them into docker-compose.override.yml. \
+   If the user specified a custom database name, username, or password, include \
+   `db_name`, `username`, and/or `password` fields in each service spec.
+4. **Read the JSON response** from `add_docker_services`. It contains the \
+   authoritative connection details (conn_type, conn_host, conn_port, \
+   conn_schema, conn_login, conn_password, conn_extra) for each service. \
+   **Use these values verbatim** in the next step — never guess credentials.
+5. Call `add_airflow_connections` with a JSON array built directly from the \
+   connection details returned in step 4.
 
 ## Important Rules
 
@@ -48,6 +54,10 @@ For every user request, follow these steps **in order**:
   `{"bootstrap.servers": "mock_kafka:9092"}`.
 - **SMTP/Email**: Use the `mailpit` catalog entry for email/SMTP testing. It \
   captures all outbound email in a web UI.
+- **Provider packages**: `add_docker_services` automatically adds the required \
+  Airflow provider packages (e.g. `apache-airflow-providers-postgres`) to the \
+  project's `requirements.txt`. Mention the added providers in your summary so \
+  the user knows which packages were installed.
 
 ## Available Service Types
 
@@ -74,29 +84,43 @@ Each item in the JSON array:
 {
   "service_type": "postgres",
   "service_name": "mock_postgres",
-  "conn_id": "mock_postgres_default"
+  "conn_id": "mock_postgres_default",
+  "db_name": "analytics_db",
+  "username": "custom_user",
+  "password": "custom_password"
 }
 ```
 
 - `service_type` must match a key in the catalog.
 - `service_name` is the Docker service name (used as hostname).
 - `conn_id` is the Airflow connection ID.
+- `db_name`, `username`, `password` are **optional** — include them only when \
+  the user explicitly provides custom values. When omitted, catalog defaults \
+  are used.
+- The tool returns a JSON object with a `services` array containing the \
+  effective connection details for each service. **Always use these returned \
+  values** when calling `add_airflow_connections`.
 
 ## Connection Specs Format (for add_airflow_connections)
 
-Each item in the JSON array:
+Build each item directly from the `services` array returned by \
+`add_docker_services`. Example:
 ```json
 {
   "conn_id": "mock_postgres_default",
   "conn_type": "postgres",
   "conn_host": "mock_postgres",
   "conn_port": 5432,
-  "conn_schema": "mock_db",
-  "conn_login": "mock_user",
-  "conn_password": "mock_password",
+  "conn_schema": "analytics_db",
+  "conn_login": "custom_user",
+  "conn_password": "custom_password",
   "conn_extra": ""
 }
 ```
+
+**Critical**: Never hardcode or guess credentials. Always copy them from the \
+`add_docker_services` response so Docker env vars and Airflow connections \
+stay in sync.
 
 ## Style
 

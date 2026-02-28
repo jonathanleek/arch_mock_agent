@@ -41,6 +41,11 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["postgresql", "pg"],
+        "credential_map": {
+            "db_name":  {"env_keys": ["POSTGRES_DB"], "conn_field": "conn_schema"},
+            "username": {"env_keys": ["POSTGRES_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["POSTGRES_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "mysql": {
         "image": "mysql:8.0",
@@ -59,6 +64,11 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["mariadb"],
+        "credential_map": {
+            "db_name":  {"env_keys": ["MYSQL_DATABASE"], "conn_field": "conn_schema"},
+            "username": {"env_keys": ["MYSQL_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["MYSQL_PASSWORD", "MYSQL_ROOT_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "mssql": {
         "image": "mcr.microsoft.com/mssql/server:2022-latest",
@@ -76,6 +86,9 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "MockPass1!",
         "conn_extra": {},
         "aliases": ["sqlserver", "sql_server", "microsoft_sql"],
+        "credential_map": {
+            "password": {"env_keys": ["MSSQL_SA_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "oracle": {
         "image": "gvenzl/oracle-xe:21-slim",
@@ -93,6 +106,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["oracle_xe", "oracledb"],
+        "credential_map": {
+            "username": {"env_keys": ["APP_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["ORACLE_PASSWORD", "APP_USER_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "vertica": {
         "image": "vertica/vertica-ce:24.3.0-0",
@@ -110,6 +127,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["vertica_ce"],
+        "credential_map": {
+            "username": {"env_keys": ["APP_DB_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["APP_DB_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     # -------------------------------------------------------------------------
     # NoSQL / Document Databases
@@ -129,6 +150,11 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["mongo"],
+        "credential_map": {
+            "db_name":  {"env_keys": [], "conn_field": "conn_schema"},
+            "username": {"env_keys": ["MONGO_INITDB_ROOT_USERNAME"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["MONGO_INITDB_ROOT_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "couchdb": {
         "image": "couchdb:3",
@@ -145,6 +171,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["cloudant"],
+        "credential_map": {
+            "username": {"env_keys": ["COUCHDB_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["COUCHDB_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "arangodb": {
         "image": "arangodb:3.11",
@@ -160,6 +190,9 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["arango"],
+        "credential_map": {
+            "password": {"env_keys": ["ARANGO_ROOT_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "cassandra": {
         "image": "cassandra:4.1",
@@ -177,6 +210,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "cassandra",
         "conn_extra": {},
         "aliases": ["apache_cassandra"],
+        "credential_map": {},
     },
     "ydb": {
         "image": "ydbplatform/local-ydb:latest",
@@ -193,6 +227,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["yandex_db"],
+        "credential_map": {},
     },
     # -------------------------------------------------------------------------
     # Graph Databases
@@ -211,6 +246,9 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["neo"],
+        "credential_map": {
+            "password": {"env_keys": ["NEO4J_AUTH"], "conn_field": "conn_password", "env_transform": "neo4j/{value}"},
+        },
     },
     "gremlin": {
         "image": "tinkerpop/gremlin-server:3.7.3",
@@ -224,6 +262,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["tinkerpop", "gremlin_server", "apache_tinkerpop"],
+        "credential_map": {},
     },
     # -------------------------------------------------------------------------
     # Vector Databases
@@ -240,6 +279,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": [],
+        "credential_map": {},
     },
     "weaviate": {
         "image": "cr.weaviate.io/semitechnologies/weaviate:1.28.2",
@@ -258,6 +298,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": [],
+        "credential_map": {},
     },
     "pgvector": {
         "image": "pgvector/pgvector:pg17",
@@ -275,6 +316,11 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["pgvector_db", "vector_db"],
+        "credential_map": {
+            "db_name":  {"env_keys": ["POSTGRES_DB"], "conn_field": "conn_schema"},
+            "username": {"env_keys": ["POSTGRES_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["POSTGRES_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     # -------------------------------------------------------------------------
     # Search & Analytics Engines
@@ -295,6 +341,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["es", "elastic"],
+        "credential_map": {},
     },
     "opensearch": {
         "image": "opensearchproject/opensearch:2",
@@ -312,6 +359,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["open_search"],
+        "credential_map": {},
     },
     "trino": {
         "image": "trinodb/trino:latest",
@@ -325,6 +373,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["trinodb", "presto"],
+        "credential_map": {},
     },
     "drill": {
         "image": "apache/drill:1.21.2",
@@ -338,6 +387,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["apache_drill"],
+        "credential_map": {},
     },
     "pinot": {
         "image": "apachepinot/pinot:1.2.0",
@@ -354,6 +404,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["apache_pinot"],
+        "credential_map": {},
     },
     "influxdb": {
         "image": "influxdb:2",
@@ -377,6 +428,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "org_name": "mock_org",
         },
         "aliases": ["influx"],
+        "credential_map": {
+            "username": {"env_keys": ["DOCKER_INFLUXDB_INIT_USERNAME"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["DOCKER_INFLUXDB_INIT_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     # -------------------------------------------------------------------------
     # Caches & Key-Value Stores
@@ -393,6 +448,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": [],
+        "credential_map": {},
     },
     # -------------------------------------------------------------------------
     # Messaging & Streaming
@@ -420,6 +476,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "bootstrap.servers": "{service_name}:{container_port}",
         },
         "aliases": ["apache_kafka"],
+        "credential_map": {},
     },
     # -------------------------------------------------------------------------
     # Cloud Service Emulators
@@ -446,6 +503,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "lambda", "kinesis", "stepfunctions", "sts", "iam",
             "cloudwatch", "eventbridge",
         ],
+        "credential_map": {},
     },
     "azurite": {
         "image": "mcr.microsoft.com/azure-storage/azurite:latest",
@@ -471,6 +529,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "azure_blob", "azure_storage", "wasb", "azure",
             "blob_storage", "azure_queue", "azure_table",
         ],
+        "credential_map": {},
     },
     "fake_gcs": {
         "image": "fsouza/fake-gcs-server:latest",
@@ -488,6 +547,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "num_retries": 0,
         },
         "aliases": ["gcs", "google_cloud_storage", "gcp_storage"],
+        "credential_map": {},
     },
     "minio": {
         "image": "minio/minio:latest",
@@ -508,6 +568,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "endpoint_url": "http://{service_name}:{container_port}",
         },
         "aliases": ["minio_s3"],
+        "credential_map": {
+            "username": {"env_keys": ["MINIO_ROOT_USER"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["MINIO_ROOT_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     # -------------------------------------------------------------------------
     # Secret Management
@@ -531,6 +595,9 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
             "auth_type": "token",
         },
         "aliases": ["hashicorp_vault", "hashicorp"],
+        "credential_map": {
+            "password": {"env_keys": ["VAULT_DEV_ROOT_TOKEN_ID"], "conn_field": "conn_password"},
+        },
     },
     # -------------------------------------------------------------------------
     # Time-Series Databases
@@ -545,6 +612,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "container_port": 22,
         "environment": {},
         "command": "mock_user:mock_password:::upload",
+        "command_template": "{username}:{password}:::upload",
         "volumes": {},
         "conn_type": "sftp",
         "conn_schema": "",
@@ -552,6 +620,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["ftp"],
+        "credential_map": {
+            "username": {"env_keys": [], "conn_field": "conn_login"},
+            "password": {"env_keys": [], "conn_field": "conn_password"},
+        },
     },
     "ssh": {
         "image": "linuxserver/openssh-server:latest",
@@ -572,12 +644,17 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["openssh"],
+        "credential_map": {
+            "username": {"env_keys": ["USER_NAME"], "conn_field": "conn_login"},
+            "password": {"env_keys": ["USER_PASSWORD"], "conn_field": "conn_password"},
+        },
     },
     "samba": {
         "image": "dperson/samba:latest",
         "default_port": 445,
         "container_port": 445,
         "command": '-u "mock_user;mock_password" -s "share;/share;no;no;no;mock_user"',
+        "command_template": '-u "{username};{password}" -s "share;/share;no;no;no;{username}"',
         "environment": {},
         "volumes": {"mock_samba_data": "/share"},
         "conn_type": "samba",
@@ -586,6 +663,10 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "mock_password",
         "conn_extra": {},
         "aliases": ["smb", "cifs"],
+        "credential_map": {
+            "username": {"env_keys": [], "conn_field": "conn_login"},
+            "password": {"env_keys": [], "conn_field": "conn_password"},
+        },
     },
     # -------------------------------------------------------------------------
     # Email
@@ -604,6 +685,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["smtp", "email", "mail"],
+        "credential_map": {},
     },
     # -------------------------------------------------------------------------
     # CI/CD
@@ -622,6 +704,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "admin",
         "conn_extra": {},
         "aliases": [],
+        "credential_map": {},
     },
     # -------------------------------------------------------------------------
     # Compute / Processing Engines
@@ -640,6 +723,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "conn_password": "",
         "conn_extra": {},
         "aliases": ["apache_spark", "spark_master"],
+        "credential_map": {},
     },
 }
 
@@ -656,3 +740,69 @@ def find_service(query: str) -> list[tuple[str, dict[str, Any]]]:
         if any(q in name for name in names):
             results.append((key, spec))
     return results
+
+
+def apply_overrides(
+    service_type: str,
+    overrides: dict[str, str] | None = None,
+) -> tuple[dict[str, str], str | None, dict[str, str]]:
+    """Return (environment, command_or_None, conn_fields) with overrides applied.
+
+    *overrides* is an optional dict with keys like ``db_name``, ``username``,
+    ``password`` — the abstract override keys defined in each service's
+    ``credential_map``.
+
+    When *overrides* is ``None`` or empty, the catalog defaults are returned
+    unchanged (backward-compatible).
+    """
+    if service_type not in SERVICE_CATALOG:
+        raise KeyError(f"Unknown service type: {service_type}")
+
+    cat = SERVICE_CATALOG[service_type]
+    env = dict(cat["environment"])
+    command: str | None = cat.get("command")
+    conn_fields: dict[str, str] = {
+        "conn_schema": cat["conn_schema"],
+        "conn_login": cat["conn_login"],
+        "conn_password": cat["conn_password"],
+    }
+
+    if not overrides:
+        return env, command, conn_fields
+
+    cred_map: dict[str, dict[str, Any]] = cat.get("credential_map", {})
+
+    # Collect effective values for command_template substitution.
+    # Start with catalog defaults so un-overridden keys still resolve.
+    template_values: dict[str, str] = {
+        "username": cat["conn_login"],
+        "password": cat["conn_password"],
+        "db_name": cat["conn_schema"],
+    }
+
+    for key, value in overrides.items():
+        mapping = cred_map.get(key)
+        if mapping is None:
+            continue
+
+        template_values[key] = value
+
+        # Update environment variables.
+        transform = mapping.get("env_transform")
+        for env_key in mapping.get("env_keys", []):
+            if transform:
+                env[env_key] = transform.replace("{value}", value)
+            else:
+                env[env_key] = value
+
+        # Update connection field.
+        conn_field = mapping.get("conn_field")
+        if conn_field:
+            conn_fields[conn_field] = value
+
+    # Rebuild command from template if one exists.
+    command_template = cat.get("command_template")
+    if command_template:
+        command = command_template.format(**template_values)
+
+    return env, command, conn_fields

@@ -9,7 +9,9 @@ from typing import Any
 from anthropic.lib.tools import beta_tool
 
 from catalog.ports import allocate_port
-from catalog.services import SERVICE_CATALOG, find_service
+from catalog.providers import get_provider_packages
+from catalog.services import SERVICE_CATALOG, apply_overrides, find_service
+from utils.requirements_io import add_packages, read_requirements
 from utils.yaml_io import read_yaml, write_yaml
 from utils.yaml_merge import merge_airflow_settings, merge_docker_compose
 
@@ -31,6 +33,10 @@ def _compose_path() -> Path:
 
 def _settings_path() -> Path:
     return _project_dir / "airflow_settings.yaml"
+
+
+def _requirements_path() -> Path:
+    return _project_dir / "requirements.txt"
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +74,19 @@ def list_existing_services() -> str:
     else:
         lines.append("No Airflow connections configured yet.")
 
+    req_lines = read_requirements(_requirements_path())
+    provider_lines = [
+        l for l in req_lines
+        if l.strip() and not l.strip().startswith("#")
+        and "apache-airflow-providers" in l.lower()
+    ]
+    if provider_lines:
+        lines.append("\nProvider packages (requirements.txt):")
+        for pl in provider_lines:
+            lines.append(f"  - {pl.strip()}")
+    else:
+        lines.append("\nNo Airflow provider packages in requirements.txt yet.")
+
     return "\n".join(lines)
 
 
@@ -98,6 +117,12 @@ def get_service_catalog(query: str) -> str:
         lines.append(f"  Default host port: {spec['default_port']}")
         lines.append(f"  Container port: {spec['container_port']}")
         lines.append(f"  Conn type: {spec['conn_type']}")
+        lines.append(f"  Default conn_login: {spec['conn_login']}")
+        lines.append(f"  Default conn_password: {spec['conn_password']}")
+        lines.append(f"  Default conn_schema: {spec['conn_schema']}")
+        cred_map = spec.get("credential_map", {})
+        if cred_map:
+            lines.append(f"  Overridable fields: {', '.join(cred_map.keys())}")
         lines.append(f"  Aliases: {spec.get('aliases', [])}")
         lines.append("")
     return "\n".join(lines)
@@ -142,63 +167,113 @@ def add_docker_services(services_json: str) -> str:
     - service_name: Docker service name (e.g. 'mock_postgres')
     - conn_id: Airflow connection ID (used for labeling only)
 
+    Optional credential overrides (applied to both Docker env and connection):
+    - db_name: override the default database/schema name
+    - username: override the default username
+    - password: override the default password
+
+    Returns a JSON object with status and effective connection details per
+    service, so downstream tools can use authoritative credentials.
+
     Args:
         services_json: JSON array of service spec objects.
     """
     try:
         specs: list[dict[str, Any]] = json.loads(services_json)
     except json.JSONDecodeError as e:
-        return f"Invalid JSON: {e}"
+        return json.dumps({"status": "error", "message": f"Invalid JSON: {e}"})
 
     new_services: dict[str, Any] = {}
     new_volumes: dict[str, Any] = {}
-    summary: list[str] = []
+    result_services: list[dict[str, Any]] = []
 
     for spec in specs:
         stype = spec.get("service_type", "")
         sname = spec.get("service_name", f"mock_{stype}")
+        conn_id = spec.get("conn_id", f"{sname}_default")
 
         if stype not in SERVICE_CATALOG:
-            summary.append(f"SKIP: unknown service_type '{stype}'")
+            result_services.append({"service_name": sname, "error": f"unknown service_type '{stype}'"})
             continue
 
         cat = SERVICE_CATALOG[stype]
         host_port = allocate_port(cat["default_port"])
 
+        # Build overrides dict from optional spec keys.
+        overrides: dict[str, str] = {}
+        for key in ("db_name", "username", "password"):
+            if key in spec:
+                overrides[key] = spec[key]
+
+        env, command, conn_fields = apply_overrides(stype, overrides or None)
+
         service_def: dict[str, Any] = {
             "image": cat["image"],
             "ports": [f"{host_port}:{cat['container_port']}"],
-            "environment": dict(cat["environment"]),
+            "environment": env,
             "networks": ["airflow"],
         }
 
-        if cat.get("command"):
-            service_def["command"] = cat["command"]
+        # Substitute placeholders in command.
+        if command:
+            command = command.replace("{service_name}", sname)
+            command = command.replace("{container_port}", str(cat["container_port"]))
+            service_def["command"] = command
 
-        # Collect named volumes
+        # Collect named volumes.
         for vol_name, mount_path in cat.get("volumes", {}).items():
             service_def.setdefault("volumes", []).append(f"{vol_name}:{mount_path}")
             new_volumes[vol_name] = None
 
         new_services[sname] = service_def
-        summary.append(
-            f"Added {sname} ({cat['image']}) — "
-            f"host port {host_port} -> container port {cat['container_port']}"
-        )
+
+        # Substitute placeholders in conn_extra.
+        conn_extra = dict(cat.get("conn_extra", {}))
+        for ek, ev in conn_extra.items():
+            if isinstance(ev, str):
+                conn_extra[ek] = ev.replace("{service_name}", sname).replace(
+                    "{container_port}", str(cat["container_port"])
+                )
+
+        result_services.append({
+            "service_name": sname,
+            "conn_id": conn_id,
+            "conn_type": cat["conn_type"],
+            "conn_host": sname,
+            "conn_port": cat["container_port"],
+            "conn_schema": conn_fields["conn_schema"],
+            "conn_login": conn_fields["conn_login"],
+            "conn_password": conn_fields["conn_password"],
+            "conn_extra": conn_extra,
+        })
 
     if not new_services:
-        return "No valid services to add.\n" + "\n".join(summary)
+        return json.dumps({"status": "error", "message": "No valid services to add.", "services": result_services})
 
     existing = read_yaml(_compose_path())
     merged = merge_docker_compose(existing, new_services, new_volumes)
 
+    # Resolve provider packages for the conn_types being added.
+    conn_types = [s["conn_type"] for s in result_services if "conn_type" in s]
+    provider_packages = get_provider_packages(conn_types)
+
     if _dry_run:
         import yaml
         preview = yaml.dump(merged, default_flow_style=False, sort_keys=False)
-        return "DRY RUN — would write docker-compose.override.yml:\n\n" + preview
+        would_add = add_packages(_requirements_path(), provider_packages, dry_run=True)
+        return json.dumps({
+            "status": "dry_run",
+            "compose_preview": preview,
+            "services": result_services,
+            "providers_would_add": would_add,
+        })
 
     write_yaml(_compose_path(), merged)
-    return "Updated docker-compose.override.yml:\n" + "\n".join(summary)
+    providers_added = add_packages(_requirements_path(), provider_packages)
+    result: dict[str, Any] = {"status": "ok", "services": result_services}
+    if providers_added:
+        result["providers_added"] = providers_added
+    return json.dumps(result)
 
 
 # ---------------------------------------------------------------------------
