@@ -50,6 +50,10 @@ def _test_connection(conn_id: str) -> str:
 def test_mock_connections():
 '''
 
+    # Filter out connections without a usable conn_id (e.g. YAML template
+    # entries where conn_id is null).
+    connections = [c for c in connections if c.get("conn_id")]
+
     if not connections:
         body = "    pass\n"
         invocations = ""
@@ -60,7 +64,7 @@ def test_mock_connections():
         invocation_lines: list[str] = []
 
         for conn in connections:
-            conn_id = conn.get("conn_id", "unknown")
+            conn_id = conn["conn_id"]
             base_name = _sanitize_task_name(conn_id)
 
             if base_name in seen:
