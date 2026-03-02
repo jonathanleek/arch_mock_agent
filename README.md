@@ -23,15 +23,22 @@ This tool handles all of that. You say what you need, it writes the config. When
 
 ## Installation
 
-Clone the repo and install dependencies into a virtual environment:
+Install with `pipx` (recommended) or `pip`:
+
+```bash
+# From a local clone
+pipx install .
+
+# Or directly from GitHub
+pipx install git+https://github.com/<owner>/arch-mock-agent.git
+```
+
+For development:
 
 ```bash
 git clone <repo-url> astro-mock-agent
 cd astro-mock-agent
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Quick Start
@@ -40,22 +47,22 @@ From inside your Astro project directory:
 
 ```bash
 # One-shot: describe what you need and the agent writes the config
-python /path/to/astro-mock-agent/main.py "I need an S3 bucket and a Postgres database"
+astro-mock "I need an S3 bucket and a Postgres database"
 
 # Remove a service you no longer need
-python /path/to/astro-mock-agent/main.py "Remove the Postgres service"
+astro-mock "Remove the Postgres service"
 
 # Preview what would change without writing any files
-python /path/to/astro-mock-agent/main.py --dry-run "Add Redis and MongoDB"
+astro-mock --dry-run "Add Redis and MongoDB"
 
 # Interactive mode: have a conversation, add and remove services incrementally
-python /path/to/astro-mock-agent/main.py
+astro-mock
 ```
 
 If your Astro project is in a different directory than your shell's current directory:
 
 ```bash
-python /path/to/astro-mock-agent/main.py --project-dir /path/to/my-astro-project "I need S3"
+astro-mock --project-dir /path/to/my-astro-project "I need S3"
 ```
 
 ## What It Does
@@ -196,7 +203,7 @@ Runs a Spark master node. For a full cluster, you'd add worker containers separa
 ## CLI Reference
 
 ```
-usage: main.py [-h] [--project-dir PROJECT_DIR] [--dry-run] [--model MODEL] [request]
+usage: astro-mock [-h] [--project-dir PROJECT_DIR] [--dry-run] [--model MODEL] [request]
 ```
 
 | Argument | Description |
@@ -234,32 +241,32 @@ The tools it has access to:
 **Add multiple services at once:**
 
 ```bash
-python main.py "I need Postgres for my warehouse, S3 for file storage, and Redis for caching"
+astro-mock "I need Postgres for my warehouse, S3 for file storage, and Redis for caching"
 ```
 
 **Add to an existing setup (services are merged, not replaced):**
 
 ```bash
-python main.py "I need S3 and Postgres"
+astro-mock "I need S3 and Postgres"
 # ...later...
-python main.py "Now add Redis"
+astro-mock "Now add Redis"
 # Redis is added alongside the existing S3 and Postgres config
 ```
 
 **Remove a service you no longer need:**
 
 ```bash
-python main.py "Remove mock_postgres"
+astro-mock "Remove mock_postgres"
 # Removes the Docker service, Airflow connection, and orphaned volumes
 
-python main.py "Remove mock_postgres and clean up its provider package"
+astro-mock "Remove mock_postgres and clean up its provider package"
 # Also removes apache-airflow-providers-postgres from requirements.txt if no other service needs it
 ```
 
 **Interactive session:**
 
 ```
-$ python main.py
+$ astro-mock
 > I need a Postgres database and an S3 bucket
 
   Added mock_postgres (postgres:15) — host port 5433 -> container port 5432
@@ -281,7 +288,7 @@ $ python main.py
 **Preview before writing:**
 
 ```bash
-python main.py --dry-run "I need Elasticsearch"
+astro-mock --dry-run "I need Elasticsearch"
 ```
 
 ## Port Conflicts
