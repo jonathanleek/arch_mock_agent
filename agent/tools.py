@@ -8,6 +8,7 @@ from typing import Any
 
 from anthropic.lib.tools import beta_tool
 
+from catalog.image_check import check_image_exists
 from catalog.ports import allocate_port
 from catalog.providers import get_provider_packages
 from catalog.services import SERVICE_CATALOG, apply_overrides, find_service
@@ -207,6 +208,14 @@ def add_docker_services(services_json: str) -> str:
             continue
 
         cat = SERVICE_CATALOG[stype]
+
+        if not check_image_exists(cat["image"]):
+            result_services.append({
+                "service_name": sname,
+                "error": f"image '{cat['image']}' not found on registry",
+            })
+            continue
+
         host_port = allocate_port(cat["default_port"])
 
         # Build overrides dict from optional spec keys.
