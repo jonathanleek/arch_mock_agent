@@ -3,6 +3,11 @@
 Uses stdlib ``urllib`` so there are no extra dependencies.  Avoids
 ``docker manifest inspect`` which counts against Docker Hub's
 unauthenticated pull rate-limit and requires the Docker CLI.
+
+Only returns *False* when the registry definitively responds with
+HTTP 404 (not found).  Network errors, timeouts, and rate-limits are
+treated as "inconclusive" and default to *True* so that transient
+issues don't block every service.
 """
 
 from __future__ import annotations
@@ -73,7 +78,8 @@ def _check_docker_hub(repository: str, tag: str) -> bool:
         with urllib.request.urlopen(token_url, timeout=_TIMEOUT) as resp:
             token = json.loads(resp.read())["token"]
     except (urllib.error.URLError, KeyError, json.JSONDecodeError):
-        return False
+        # Can't reach auth endpoint — assume image is valid.
+        return True
 
     # 2. HEAD the manifest endpoint.
     manifest_url = f"{_DOCKER_HUB_REGISTRY}/v2/{repository}/manifests/{tag}"
@@ -88,10 +94,15 @@ def _check_docker_hub(repository: str, tag: str) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             return resp.status == 200
-    except urllib.error.HTTPError:
-        return False
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 404):
+            # 404 = tag not found; 401 after a valid token = repo doesn't
+            # exist (Docker Hub returns "insufficient_scope").
+            return False
+        # 429 (rate-limit), 500, etc. — inconclusive, assume valid.
+        return True
     except urllib.error.URLError:
-        return False
+        return True
 
 
 def _check_generic_registry(registry: str, repository: str, tag: str) -> bool:
@@ -114,16 +125,19 @@ def _check_generic_registry(registry: str, repository: str, tag: str) -> bool:
         with urllib.request.urlopen(head_req, timeout=_TIMEOUT) as resp:
             return resp.status == 200
     except urllib.error.HTTPError as exc:
-        if exc.code != 401:
+        if exc.code == 404:
             return False
-        # Try to extract bearer realm from Www-Authenticate.
+        if exc.code != 401:
+            # 429, 500, etc. — inconclusive, assume valid.
+            return True
+        # 401 — try to extract bearer realm from Www-Authenticate.
         www_auth = exc.headers.get("Www-Authenticate", "")
     except urllib.error.URLError:
-        return False
+        return True
 
     # Parse the bearer challenge.
     if not www_auth.lower().startswith("bearer "):
-        return False
+        return True
 
     params: dict[str, str] = {}
     for part in www_auth[7:].split(","):
@@ -132,7 +146,7 @@ def _check_generic_registry(registry: str, repository: str, tag: str) -> bool:
 
     realm = params.get("realm", "")
     if not realm:
-        return False
+        return True
 
     # Build token request.
     token_url = realm
@@ -147,10 +161,10 @@ def _check_generic_registry(registry: str, repository: str, tag: str) -> bool:
             body = json.loads(resp.read())
             token = body.get("token") or body.get("access_token", "")
     except (urllib.error.URLError, KeyError, json.JSONDecodeError):
-        return False
+        return True
 
     if not token:
-        return False
+        return True
 
     # Retry the manifest HEAD with the token.
     auth_req = urllib.request.Request(
@@ -164,16 +178,21 @@ def _check_generic_registry(registry: str, repository: str, tag: str) -> bool:
     try:
         with urllib.request.urlopen(auth_req, timeout=_TIMEOUT) as resp:
             return resp.status == 200
-    except (urllib.error.HTTPError, urllib.error.URLError):
-        return False
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        return True
+    except urllib.error.URLError:
+        return True
 
 
 def check_image_exists(image: str) -> bool:
-    """Return *True* if *image* exists on its registry, *False* otherwise.
+    """Return *True* if *image* exists on its registry, *False* only when
+    the registry definitively responds with 404.
 
     Uses the Docker Registry v2 HTTP API directly — no Docker CLI needed,
-    and no pull rate-limit hit.  A 10-second per-request timeout prevents
-    network issues from blocking the tool.
+    and no pull rate-limit hit.  Network errors, timeouts, and rate-limits
+    are treated as inconclusive and default to *True*.
     """
     registry, repository, tag = _parse_image(image)
 
