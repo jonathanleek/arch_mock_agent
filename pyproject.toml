@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["agent"]
+packages = ["agent", "catalog", "utils"]
 
 [project.scripts]
 astro-mock = "agent.cli:main"
