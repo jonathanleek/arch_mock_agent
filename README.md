@@ -29,15 +29,15 @@ Install with `pipx` (recommended) or `pip`:
 # From a local clone
 pipx install .
 
-# Or directly from GitHub
-pipx install git+https://github.com/<owner>/arch-mock-agent.git
+# Or directly from GitHub (requires repo access)
+pipx install git+ssh://git@github.com/jonathanleek/arch_mock_agent.git
 ```
 
 For development:
 
 ```bash
-git clone <repo-url> astro-mock-agent
-cd astro-mock-agent
+git clone git@github.com:jonathanleek/arch_mock_agent.git
+cd arch_mock_agent
 pip install -e .
 ```
 
