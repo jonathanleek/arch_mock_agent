@@ -153,7 +153,7 @@ You can refer to services by name or common aliases. For example, "S3", "SQS", a
 
 | Service | Docker Image | Host Port | Conn Type | Aliases |
 |---|---|---|---|---|
-| Apache Kafka | `apache/kafka:3.9` | 9092 | `kafka` | — |
+| Apache Kafka | `apache/kafka:3.9.2` | 9092 | `kafka` | — |
 
 ### Cloud Service Emulators
 
