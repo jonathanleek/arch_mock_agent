@@ -112,7 +112,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         },
     },
     "vertica": {
-        "image": "vertica/vertica-ce:24.3.0-0",
+        "image": "opentext/vertica-ce:24.3.0-2",
         "default_port": 5434,
         "container_port": 5433,
         "environment": {
@@ -376,7 +376,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         "credential_map": {},
     },
     "drill": {
-        "image": "apache/drill:1.21.2",
+        "image": "apache/drill:1.21.2-openjdk-11",
         "default_port": 8047,
         "container_port": 8047,
         "environment": {},

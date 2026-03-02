@@ -105,7 +105,7 @@ You can refer to services by name or common aliases. For example, "S3", "SQS", a
 | MySQL | `mysql:8.0` | 3307 | `mysql` | mariadb |
 | SQL Server | `mcr.microsoft.com/mssql/server:2022-latest` | 1433 | `mssql` | sqlserver |
 | Oracle XE | `gvenzl/oracle-xe:21-slim` | 1521 | `oracle` | oracledb |
-| Vertica CE | `vertica/vertica-ce:24.3.0-0` | 5434 | `vertica` | — |
+| Vertica CE | `opentext/vertica-ce:24.3.0-2` | 5434 | `vertica` | — |
 
 ### NoSQL / Document Databases
 
@@ -139,7 +139,7 @@ You can refer to services by name or common aliases. For example, "S3", "SQS", a
 | Elasticsearch | `elasticsearch:8.12.0` | 9200 | `elasticsearch` | es, elastic |
 | OpenSearch | `opensearchproject/opensearch:2` | 9201 | `opensearch` | — |
 | Trino | `trinodb/trino:latest` | 8081 | `trino` | presto |
-| Apache Drill | `apache/drill:1.21.2` | 8047 | `drill` | — |
+| Apache Drill | `apache/drill:1.21.2-openjdk-11` | 8047 | `drill` | — |
 | Apache Pinot | `apachepinot/pinot:1.2.0` | 8099 | `pinot` | — |
 | InfluxDB | `influxdb:2` | 8086 | `influxdb` | influx |
 
