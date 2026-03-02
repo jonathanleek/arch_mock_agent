@@ -454,7 +454,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
     # Messaging & Streaming
     # -------------------------------------------------------------------------
     "kafka": {
-        "image": "apache/kafka:3.9",
+        "image": "apache/kafka:3.9.2",
         "default_port": 9092,
         "container_port": 9092,
         "environment": {
