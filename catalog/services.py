@@ -112,7 +112,7 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
         },
     },
     "vertica": {
-        "image": "opentext/vertica-ce:24.3.0-2",
+        "image": "opentext/vertica-k8s:25.3.0-6",
         "default_port": 5434,
         "container_port": 5433,
         "environment": {
@@ -710,11 +710,11 @@ SERVICE_CATALOG: dict[str, dict[str, Any]] = {
     # Compute / Processing Engines
     # -------------------------------------------------------------------------
     "spark": {
-        "image": "bitnami/spark:3.5",
+        "image": "apache/spark:4.0.2",
         "default_port": 7077,
         "container_port": 7077,
         "environment": {
-            "SPARK_MODE": "master",
+            "SPARK_MASTER_HOST": "0.0.0.0",
         },
         "volumes": {},
         "conn_type": "spark",
